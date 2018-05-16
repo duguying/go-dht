@@ -132,7 +132,6 @@ func decodeDHTxxPulses(sensorType SensorType, pulses []Pulse) (temperature float
 	} else if len(pulses) == 83 {
 		pulses = pulses[1:]
 	} else if len(pulses) != 82 {
-		printPulseArrayForDebug(pulses)
 		return -1, -1, fmt.Errorf("Can't decode pulse array received from "+
 			"DHTxx sensor, since incorrect length: %d", len(pulses))
 	}
