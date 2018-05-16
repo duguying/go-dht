@@ -5,14 +5,12 @@ package dht
 import "C"
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"reflect"
 	"time"
 	"unsafe"
 
-	"github.com/d2r2/go-shell"
 	"github.com/davecgh/go-spew/spew"
 )
 
@@ -172,12 +170,8 @@ func decodeDHTxxPulses(sensorType SensorType, pulses []Pulse) (temperature float
 				"calculated checksum(%v=%v+%v+%v+%v)",
 			sum, calcSum, b0, b1, b2, b3))
 		return -1, -1, err
-	} else {
-		lg.Debugf("CRCs verified: checksum from sensor(%v) = calculated checksum(%v=%v+%v+%v+%v)",
-			sum, calcSum, b0, b1, b2, b3)
 	}
-	// Debug output for 5 bytes
-	lg.Debugf("Decoded from DHTxx sensor: [%d, %d, %d, %d, %d]", b0, b1, b2, b3, sum)
+
 	// Extract temprature and humidity depending on sensor type
 	temperature, humidity = 0.0, 0.0
 	if sensorType == DHT11 {
@@ -196,17 +190,6 @@ func decodeDHTxxPulses(sensorType SensorType, pulses []Pulse) (temperature float
 	}
 	// Success
 	return temperature, humidity, nil
-}
-
-// Print bunch of pulses for debug purpose.
-func printPulseArrayForDebug(pulses []Pulse) {
-	// var buf bytes.Buffer
-	// for i, pulse := range pulses {
-	// 	buf.WriteString(fmt.Sprintf("pulse %3d: %v, %v\n", i,
-	// 		pulse.Value, pulse.Duration))
-	// }
-	// lg.Debugf("Pulse count %d:\n%v", len(pulses), buf.String())
-	lg.Debugf("Pulses received from DHTxx sensor: %v", pulses)
 }
 
 // Send activation request to DHTxx sensor via specific pin.
@@ -230,56 +213,11 @@ func ReadDHTxx(sensorType SensorType, pin int,
 	if err != nil {
 		return -1, -1, err
 	}
-	// Output debug information
-	printPulseArrayForDebug(pulses)
+
 	// Decode pulses
 	temp, hum, err := decodeDHTxxPulses(sensorType, pulses)
 	if err != nil {
 		return -1, -1, err
 	}
 	return temp, hum, nil
-}
-
-// Send activation request to DHTxx sensor via specific pin.
-// Then decode pulses sent back with asynchronous
-// protocol specific for DHTxx sensors. Retry n times in case of failure.
-//
-// Input parameters:
-// 1) sensor type: DHT11, DHT22 (aka AM2302);
-// 2) pin number from gadget GPIO to interract with sensor;
-// 3) boost GPIO performance flag should be used for old devices
-// such as Raspberry PI 1 (this will require root privileges);
-// 4) how many times to retry until success either сounter is zeroed.
-//
-// Return:
-// 1) temperature in Celsius;
-// 2) humidity in percent;
-// 3) number of extra retries data from sensor;
-// 4) error if present.
-func ReadDHTxxWithRetry(sensorType SensorType, pin int, boostPerfFlag bool,
-	retry int) (temperature float32, humidity float32, retried int, err error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	shell.CloseContextOnKillSignal(cancel)
-	retried = 0
-	for {
-		temp, hum, err := ReadDHTxx(sensorType, pin, boostPerfFlag)
-		if err != nil {
-			if retry > 0 {
-				lg.Warning(err)
-				retry--
-				retried++
-				select {
-				case <-ctx.Done():
-					// Interrupt loop, if pending termination
-					return -1, -1, retried, errors.New("Termination pending...")
-				default:
-					// Sleep before new attempt
-					time.Sleep(1500 * time.Millisecond)
-					continue
-				}
-			}
-			return -1, -1, retried, err
-		}
-		return temp, hum, retried, nil
-	}
 }
